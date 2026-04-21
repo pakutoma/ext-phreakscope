@@ -4,6 +4,7 @@
 
 #include "php.h"
 #include "ext/standard/info.h"
+#include "ext/random/php_random.h"
 #include "php_phreakscope.h"
 #include "zend_exceptions.h"
 #include "phreakscope_arginfo.h"
@@ -34,6 +35,9 @@ static void *phreakscope_handler(void *data) {
 #else
     volatile zend_executor_globals *eg = &executor_globals;
 #endif
+
+	// initial delay
+    usleep(globals->initial_delay_usec);
 
     while (1) {
         volatile zend_execute_data *ex = eg->current_execute_data;
@@ -148,6 +152,7 @@ static void phreakscope_start(long interval_usec, size_t allocated_bytes) {
     globals->traces_cache[1] = safe_emalloc(PHREAKSCOPE_MAX_DEPTH, sizeof(trace_frame_t), 0);
     globals->last_trace_index = 0;
     globals->last_trace_depth = 0;
+    globals->initial_delay_usec = php_mt_rand_range(0, interval_usec - 1);
 
     if (pthread_create(&globals->thread_id, NULL, phreakscope_handler, NULL)) {
         zend_throw_exception(NULL, "Could not create profiling thread", 0);

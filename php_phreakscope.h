@@ -37,6 +37,7 @@ ZEND_BEGIN_MODULE_GLOBALS(phreakscope)
     trace_frame_t *traces_cache[2];
     uint8_t last_trace_index;
     uint8_t last_trace_depth;
+    uint32_t initial_delay_usec;
 ZEND_END_MODULE_GLOBALS(phreakscope)
 
 #define PHREAKSCOPE_G ZEND_MODULE_GLOBALS_BULK(phreakscope)
