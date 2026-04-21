@@ -40,7 +40,7 @@ static void *phreakscope_handler(void *data) {
         volatile zend_execute_data *start_ex = ex;
         bool is_ex_changed = 0;
         int trace_depth = 0;
-        int current_index = globals->last_traces_index ^ 1;
+        int current_trace_index = globals->last_trace_index ^ 1;
 
         while (ex) {
             volatile zend_function *func;
@@ -67,7 +67,7 @@ static void *phreakscope_handler(void *data) {
                 break;
             }
 
-            globals->traces_cache[current_index][trace_depth].func = (zend_function *) func;
+            globals->traces_cache[current_trace_index][trace_depth].func = (zend_function *) func;
 
             trace_depth++;
             ex = prev;
@@ -83,9 +83,12 @@ static void *phreakscope_handler(void *data) {
         }
 
         int reuse_depth = 0;
-        while (reuse_depth < trace_depth && reuse_depth < globals->last_traces_depth) {
-            trace_frame_t *current_frame = &globals->traces_cache[current_index][reuse_depth];
-            trace_frame_t *last_frame = &globals->traces_cache[globals->last_traces_index][reuse_depth];
+        while (reuse_depth < trace_depth && reuse_depth < globals->last_trace_depth) {
+            /* compare from the root */
+            int current_frame_index = trace_depth - 1 - reuse_depth;
+            int last_frame_index = globals->last_trace_depth - 1 - reuse_depth;
+            trace_frame_t *current_frame = &globals->traces_cache[current_trace_index][current_frame_index];
+            trace_frame_t *last_frame = &globals->traces_cache[globals->last_trace_index][last_frame_index];
             if (current_frame->func != last_frame->func) {
                 break;
             }
@@ -102,11 +105,11 @@ static void *phreakscope_handler(void *data) {
         globals->current_trace->reuse_depth = reuse_depth;
         trace_frame_t *current_frames = (trace_frame_t *) (globals->current_trace + 1);
         for (int i = 0; i < trace_depth - reuse_depth; i++) {
-            current_frames[i] = globals->traces_cache[current_index][(trace_depth - reuse_depth) - (i + 1)];
+            current_frames[i] = globals->traces_cache[current_trace_index][(trace_depth - reuse_depth) - (i + 1)];
         }
 
-        globals->last_traces_depth = trace_depth;
-        globals->last_traces_index ^= 1;
+        globals->last_trace_depth = trace_depth;
+        globals->last_trace_index ^= 1;
         globals->remaining_bytes -= sizeof(trace_entry_t) + sizeof(trace_frame_t) * (trace_depth - reuse_depth);
         globals->current_trace = (trace_entry_t *) (
             (uint8_t *) globals->current_trace
@@ -143,8 +146,8 @@ static void phreakscope_start(long interval_usec, size_t allocated_bytes) {
     globals->current_trace = globals->entries;
     globals->traces_cache[0] = safe_emalloc(PHREAKSCOPE_MAX_DEPTH, sizeof(trace_frame_t), 0);
     globals->traces_cache[1] = safe_emalloc(PHREAKSCOPE_MAX_DEPTH, sizeof(trace_frame_t), 0);
-    globals->last_traces_index = 0;
-    globals->last_traces_depth = 0;
+    globals->last_trace_index = 0;
+    globals->last_trace_depth = 0;
 
     if (pthread_create(&globals->thread_id, NULL, phreakscope_handler, NULL)) {
         zend_throw_exception(NULL, "Could not create profiling thread", 0);
