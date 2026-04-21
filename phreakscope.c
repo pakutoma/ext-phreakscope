@@ -17,14 +17,21 @@
 ZEND_DECLARE_MODULE_GLOBALS(phreakscope)
 
 static zend_bool phreakscope_end(void) {
-    if (!PHREAKSCOPE_G->enabled) {
-        return 0;
+    zend_phreakscope_globals *globals = PHREAKSCOPE_G;
+    zend_bool was_enabled = globals->enabled;
+
+    /* Even when enabled is already 0 (the sampler self-terminated on OOM),
+     * the thread is still joinable and holding the buffer we may free next. */
+    if (globals->thread_id != 0) {
+        if (was_enabled) {
+            pthread_cancel(globals->thread_id);
+        }
+        pthread_join(globals->thread_id, NULL);
+        globals->thread_id = 0;
     }
 
-    pthread_cancel(PHREAKSCOPE_G->thread_id);
-
-    PHREAKSCOPE_G->enabled = 0;
-    return 1;
+    globals->enabled = 0;
+    return was_enabled;
 }
 
 static void *phreakscope_handler(void *data) {
@@ -128,6 +135,13 @@ static void phreakscope_start(long interval_usec, size_t allocated_bytes) {
         return;
     }
 
+    /* Reap a previous sampler that self-terminated (e.g. OOM) so its buffer
+     * is no longer live before we free it. */
+    if (globals->thread_id != 0) {
+        pthread_join(globals->thread_id, NULL);
+        globals->thread_id = 0;
+    }
+
     if (globals->entries) {
         efree(globals->entries);
         efree(globals->traces_cache[0]);
@@ -147,6 +161,7 @@ static void phreakscope_start(long interval_usec, size_t allocated_bytes) {
     globals->last_traces_depth = 0;
 
     if (pthread_create(&globals->thread_id, NULL, phreakscope_handler, NULL)) {
+        globals->thread_id = 0;
         zend_throw_exception(NULL, "Could not create profiling thread", 0);
         return;
     }
