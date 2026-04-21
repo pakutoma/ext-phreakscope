@@ -227,9 +227,23 @@ PHP_FUNCTION(phreakscope_get_data) {
 
             uint8_t type = frame->func ? frame->func->type : 0;
             if (type == ZEND_USER_FUNCTION && frame->func->op_array.function_name) {
-                add_next_index_str(&frame_array, zend_string_copy(frame->func->op_array.function_name));
+                if (frame->func->common.scope) {
+                    zend_string *full = strpprintf(0, "%s::%s",
+                        ZSTR_VAL(frame->func->common.scope->name),
+                        ZSTR_VAL(frame->func->op_array.function_name));
+                    add_next_index_str(&frame_array, full);
+                } else {
+                    add_next_index_str(&frame_array, zend_string_copy(frame->func->op_array.function_name));
+                }
             } else if (type == ZEND_INTERNAL_FUNCTION && frame->func->internal_function.function_name) {
-                add_next_index_str(&frame_array, zend_string_copy(frame->func->internal_function.function_name));
+                if (frame->func->common.scope) {
+                    zend_string *full = strpprintf(0, "%s::%s",
+                        ZSTR_VAL(frame->func->common.scope->name),
+                        ZSTR_VAL(frame->func->internal_function.function_name));
+                    add_next_index_str(&frame_array, full);
+                } else {
+                    add_next_index_str(&frame_array, zend_string_copy(frame->func->internal_function.function_name));
+                }
             } else if (frame->func) {
                 add_next_index_string(&frame_array, "{main}");
             } else {
